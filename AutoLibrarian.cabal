@@ -75,6 +75,7 @@ executable AutoLibrarian
         regex-posix^>=0.96.0.2,
         bytestring^>=0.11.5.3,
         aeson^>=2.2.3.0,
+        array^>=0.5.4.0,
 -- Directories containing source files.
     hs-source-dirs:   app
 
