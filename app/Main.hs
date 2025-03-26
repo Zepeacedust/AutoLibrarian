@@ -32,7 +32,10 @@ $(deriveJSON defaultOptions ''Level)
 data Spell = Spell {
     name::Text,
     level:: (Text, Text),
-    parameters::Text,
+    range:: Text,
+    duration::Text,
+    target::Text,
+    tags::[Text],
     text::Text,
     source:: (Text,Int)
     } deriving Show
@@ -60,10 +63,10 @@ postSpell channel spell = do
 
 renderSpell :: Maybe Spell -> Text
 renderSpell Nothing      = "Spell not found"
-renderSpell (Just spell) =  name spell<> "\n" 
-                            <> (fst.level$ spell) <> " " <> (snd.level $ spell) <> "\n"
-                            <> parameters spell <> "\n" 
-                            <> text spell <> "\n"
+renderSpell (Just spell) = "### " <> name spell<> "\n**" 
+                            <> (fst.level$ spell) <> " " <> (snd.level $ spell) <> "**\n"
+                            <> "**R:** " <> range spell <>", **D:** "<> duration spell <>",**T:** " <> target spell <> ", " <> T.intercalate ", " (tags spell) <> "\n" 
+                            <> text spell <> "\n> "
                             <> (fst.source$ spell)<> " " <> (T.show . snd.source $ spell)
 
 autoLibrarian :: [Spell] ->  IO ()
