@@ -5,9 +5,10 @@ module Main where
 import           Data.List (find)
 import           Control.Monad (when, void)
 import           UnliftIO.Concurrent
-import           Data.Text (isPrefixOf, toLower, Text, pack, unpack)
+import           Data.Text (isPrefixOf, toUpper, Text, pack, unpack)
 import           Data.Aeson
 import           Data.Aeson.TH
+import qualified Data.Text as T
 import qualified Data.Text.IO as TIO
 import qualified Data.ByteString.Lazy as B
 
@@ -45,11 +46,19 @@ readGrimoire fileName = do
 
 
 lookupSpell :: [Spell] -> Text -> Maybe Spell
-lookupSpell grimoire target = find (\s -> name s == target) grimoire
+lookupSpell grimoire target = find (\s -> name s == toUpper target) grimoire
 
 postSpell ::ChannelId -> Maybe Spell -> DiscordHandler ()
 postSpell channel spell = do
-    void $ restCall (R.CreateMessage channel (pack.show $ spell))
+    void $ restCall (R.CreateMessage channel (renderSpell spell))
+
+renderSpell :: Maybe Spell -> Text
+renderSpell Nothing      = "Spell not found"
+renderSpell (Just spell) =  name spell<> "\n" 
+                            <> (fst.level$ spell) <> " " <> (snd.level $ spell) <> "\n"
+                            <> parameters spell <> "\n" 
+                            <> text spell <> "\n"
+                            <> (fst.source$ spell)<> " " <> (T.show . snd.source $ spell)
 
 -- | Replies "pong" to every message that starts with "ping"
 -- autoLibrarian :: IO ()
@@ -65,7 +74,6 @@ autoLibrarian grimoire = do
 -- eventHandler :: Event -> DiscordHandler ()
 eventHandler grimoire event = case event of
     MessageCreate m -> when( not( fromBot  m)) $ do
-        void $ restCall (R.CreateReaction (messageChannelId m, messageId m) "book")
         let matches = getMentionedSpells . unpack. messageContent $ m
             descriptions = map (lookupSpell grimoire . pack) matches
         sequence.map (postSpell (messageChannelId m)) $  descriptions
