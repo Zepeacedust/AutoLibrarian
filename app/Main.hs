@@ -65,7 +65,7 @@ renderSpell :: Maybe Spell -> Text
 renderSpell Nothing      = "Spell not found"
 renderSpell (Just spell) = "### " <> name spell<> "\n**" 
                             <> (fst.level$ spell) <> " " <> (snd.level $ spell) <> "**\n"
-                            <> "**R:** " <> range spell <>", **D:** "<> duration spell <>",**T:** " <> target spell <> ", " <> T.intercalate ", " (tags spell) <> "\n" 
+                            <> "**R:** " <> range spell <>", **D:** "<> duration spell <>", **T:** " <> target spell <> ", " <> T.intercalate ", " (tags spell) <> "\n" 
                             <> text spell <> "\n> "
                             <> (fst.source$ spell)<> " " <> (T.show . snd.source $ spell)
 
