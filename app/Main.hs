@@ -11,7 +11,7 @@ import           Data.Aeson.TH
 import qualified Data.Text as T
 import qualified Data.Text.IO as TIO
 import qualified Data.ByteString.Lazy as B
-
+import           Data.Text.Encoding
 import           Discord
 import           Discord.Types
 import qualified Discord.Requests as R
@@ -50,7 +50,13 @@ lookupSpell grimoire target = find (\s -> name s == toUpper target) grimoire
 
 postSpell ::ChannelId -> Maybe Spell -> DiscordHandler ()
 postSpell channel spell = do
-    void $ restCall (R.CreateMessage channel (renderSpell spell))
+    let spellCont = renderSpell spell
+    if T.length spellCont < 2000 
+        then
+            void $ restCall (R.CreateMessage channel (renderSpell spell))
+        else
+            void $ restCall (R.CreateMessageDetailed channel (def {R.messageDetailedFile= Just ("spell.md", encodeUtf8 spellCont)}))
+
 
 renderSpell :: Maybe Spell -> Text
 renderSpell Nothing      = "Spell not found"
@@ -60,8 +66,7 @@ renderSpell (Just spell) =  name spell<> "\n"
                             <> text spell <> "\n"
                             <> (fst.source$ spell)<> " " <> (T.show . snd.source $ spell)
 
--- | Replies "pong" to every message that starts with "ping"
--- autoLibrarian :: IO ()
+autoLibrarian :: [Spell] ->  IO ()
 autoLibrarian grimoire = do
     token <- TIO.readFile "tokenFile"
     userFacingError <- runDiscord $ def
@@ -71,7 +76,7 @@ autoLibrarian grimoire = do
              }
     TIO.putStrLn userFacingError
 
--- eventHandler :: Event -> DiscordHandler ()
+eventHandler :: [Spell] -> Event -> DiscordHandler ()
 eventHandler grimoire event = case event of
     MessageCreate m -> when( not( fromBot  m)) $ do
         let matches = getMentionedSpells . unpack. messageContent $ m
