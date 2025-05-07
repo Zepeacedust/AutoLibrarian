@@ -1,7 +1,7 @@
 {-# LANGUAGE OverloadedStrings #-}  -- allows "string literals" to be Text
 {-# LANGUAGE TemplateHaskell #-}
 module Main where
-import Data.List (minimumBy)
+import qualified Data.List as L
 import Data.Array ((!)) 
 import qualified Data.Array as Arr
 import           Data.Ord
@@ -18,6 +18,8 @@ import           Data.Text.Encoding
 import           Discord
 import           Discord.Types
 import qualified Discord.Requests as R
+
+import Calculator
 
 import Text.Regex.Posix
 
@@ -51,8 +53,8 @@ diff a b = memo 0 0 where
     helperFunc x y
         | T.index a x == T.index b y = modded
         | otherwise = minimum  [
-            (1+subbed),
-            (1+added)
+            1+subbed,
+            1+added
             ]
         where
             modded = memo (x+1) (y+1)
@@ -74,7 +76,7 @@ readGrimoire fileName = do
 
 
 lookupSpell :: [Spell] -> Text -> Spell
-lookupSpell grimoire target = minimumBy (comparing (diff (toUpper target) . name)) grimoire
+lookupSpell grimoire target = L.minimumBy (comparing (diff (toUpper target) . name)) grimoire
 
 postSpell ::ChannelId -> Spell -> DiscordHandler ()
 postSpell channel spell = do
@@ -103,13 +105,21 @@ autoLibrarian grimoire = do
              }
     TIO.putStrLn userFacingError
 
+calcMessage :: Message -> DiscordHandler ()
+calcMessage m = do
+  let reply = parseCalc.unpack.messageContent $ m
+  void $ restCall (R.CreateMessage (messageChannelId m) (T.pack reply))
+
 eventHandler :: [Spell] -> Event -> DiscordHandler ()
 eventHandler grimoire event = case event of
     MessageCreate m -> when( not( fromBot  m)) $ do
-        let matches = getMentionedSpells . unpack. messageContent $ m
-            descriptions = map (lookupSpell grimoire . pack) matches
-        sequence.map (postSpell (messageChannelId m)) $  descriptions
-        return ()
+        if "!calc" `T.isPrefixOf` messageContent m
+          then do
+            calcMessage m
+          else do
+            let matches = getMentionedSpells . unpack. messageContent $ m
+                descriptions = map (lookupSpell grimoire . pack) matches
+            mapM_ (postSpell (messageChannelId m)) descriptions
     _ -> do
         return ()
 
