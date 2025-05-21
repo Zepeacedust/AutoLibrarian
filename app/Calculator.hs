@@ -307,6 +307,7 @@ defaultUnits = [
   ("foot",     Value 30.48      [("cm",    1)]),
   ("yard",     Value 91.44      [("cm",    1)]),
   ("pace",     Value 91.44      [("cm",    1)]),
+  ("mile",     Value 160 934.4  [("cm",    1)]),
   ("denarius", Value 1          [("penny", 1)]),
   ("solidus",  Value 12         [("penny", 1)]),
   ("liber",    Value 240        [("penny", 1)]),

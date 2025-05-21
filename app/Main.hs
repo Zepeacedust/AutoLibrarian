@@ -74,14 +74,24 @@ readGrimoire fileName = do
     let Just grimoire = decode file :: Maybe [Spell]
     return grimoire
 
-
 lookupSpell :: [Spell] -> Text -> Spell
 lookupSpell grimoire target = L.minimumBy (comparing (diff (toUpper target) . name)) grimoire
+
+postSpells :: ChannelId -> [Spell] -> DiscordHandler ()
+postSpells channel spells = do
+  let spellTexts = map renderSpell spells
+  let spellChunk = T.concat . L.intersperse "\n\n" $ spellTexts
+  if T.length spellChunk < 800
+        then
+            void $ restCall (R.CreateMessage channel spellChunk)
+        else
+            void $ restCall (R.CreateMessageDetailed channel (def {R.messageDetailedFile= Just ("spell.md", encodeUtf8 spellChunk)}))
+
 
 postSpell ::ChannelId -> Spell -> DiscordHandler ()
 postSpell channel spell = do
     let spellCont = renderSpell spell
-    if T.length spellCont < 400 
+    if T.length spellCont <= 800
         then
             void $ restCall (R.CreateMessage channel (renderSpell spell))
         else
@@ -119,7 +129,7 @@ eventHandler grimoire event = case event of
           else do
             let matches = getMentionedSpells . unpack. messageContent $ m
                 descriptions = map (lookupSpell grimoire . pack) matches
-            mapM_ (postSpell (messageChannelId m)) descriptions
+            postSpells (messageChannelId m) descriptions
     _ -> do
         return ()
 
