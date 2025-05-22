@@ -152,13 +152,13 @@ valAdd :: Value -> Value -> Either String Value
 valAdd (Value lhv lht) (Value rhv rht) = do
   if rht == lht
     then return (Value (lhv + rhv) rht)
-    else Left ("Incomparable types :" ++ prettyTypes rht ++ " and " ++ prettyTypes lht)
+    else Left ("Incomparable types: " ++ prettyTypes rht ++ " and " ++ prettyTypes lht)
 
 valSub :: Value -> Value -> Either String Value
 valSub (Value lhv lht) (Value rhv rht) = do
   if rht == lht
     then return (Value (lhv - rhv) rht)
-    else Left ("Incomparable types :" ++ prettyTypes rht ++ " and " ++ prettyTypes lht)
+    else Left ("Incomparable types: " ++ prettyTypes rht ++ " and " ++ prettyTypes lht)
 
 valMul :: Value -> Value -> Either String Value
 valMul (Value lhv lht) (Value rhv rht) = do
