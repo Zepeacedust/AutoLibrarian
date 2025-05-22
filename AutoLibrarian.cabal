@@ -61,7 +61,7 @@ executable AutoLibrarian
     main-is:          Main.hs
 
     -- Modules included in this executable, other than Main.
-    -- other-modules:
+    other-modules: Calculator
 
     -- LANGUAGE extensions used by modules in this package.
     -- other-extensions:
@@ -76,7 +76,7 @@ executable AutoLibrarian
         bytestring^>=0.11.5.3,
         aeson^>=2.2.3.0,
         array^>=0.5.4.0,
-        parsec ^>= 3.1.18.0
+        parsec ^>= 3.1.18.0,
 -- Directories containing source files.
     hs-source-dirs:   app
 

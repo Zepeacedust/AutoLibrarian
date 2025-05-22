@@ -4,13 +4,13 @@ module Calculator where
 
 import Text.Parsec.Prim
 import Text.Parsec
-import Text.Parsec.Char
 
-import Data.List (intercalate)
+
+import qualified Data.List as L
 
 import Data.Ratio
 
-import Data.Maybe
+import Text.Read (readMaybe)
 
 data Token = NumTok Rational | UnitTok String | OperatorTok Operator deriving (Show, Eq)
 
@@ -22,7 +22,7 @@ data Value = Value Rational TypeSignature deriving Show
 
 type TypeSignature = [(String, Rational)]
 
-data CalcCommand = Simple AST | Formatted AST String
+data CalcCommand = Simple AST | Formatted AST String deriving Show
 
 fromEither :: Either a a -> a
 fromEither (Right m) = m
@@ -40,13 +40,13 @@ parseCalc m = fromEither $ do
 
 parseCommand :: Parsec String () CalcCommand
 parseCommand = do
-  string' "!calc"
+  _ <-string' "!calc"
   lhs <- parseEquation
-  ((do
-       spaceWrapped $ string' "to"
+  (do
+       _ <- spaceWrapped $ string' "to"
        rhs <- many anyChar
        return $ Formatted lhs rhs
-   ) <|> (return $ Simple lhs))
+   ) <|> return ( Simple lhs)
 
 prettyEval :: AST -> Either String String
 prettyEval input = do
@@ -77,10 +77,11 @@ formatCalc input format  = do
 
 
 scale :: Value -> Value -> String
-scale (Value form formT) (Value n types) =
+scale (Value form _formT) (Value n _types) =
   show (n/form)
 
-prettyNumber n= show.fromRational $ n
+prettyNumber :: Rational -> String
+prettyNumber = show.fromRational
 
 prettyType :: (String, Rational) -> String
 prettyType (name, amount)
@@ -94,8 +95,8 @@ prettyTypes t = if unders == "" then overs else overs ++ "/" ++ unders where
 
   underDims = filter (\l -> snd l < 0) t
 
-  overs = intercalate "*" (map prettyType overDims)
-  unders = intercalate "*" (map prettyType underDims)
+  overs = L.intercalate "*" (map prettyType overDims)
+  unders = L.intercalate "*" (map prettyType underDims)
 
 calculate :: String -> Either String Value
 calculate s = do
@@ -108,11 +109,11 @@ calculate s = do
 
 evaluate :: [(String, Value)] -> AST -> Either String Value
 
-evaluate env (Numb x) = Right (Value x [])
+evaluate _env (Numb x) = Right (Value x [])
 
 evaluate env (Unit s) = case lookup s env of
   Nothing -> Right (Value 1 [(s,1)])
-  Just val -> Right (val)
+  Just val -> Right val
 
 evaluate env (UnaryOp _operator inner) = do
   Value innerVal innerType <- evaluate env inner
@@ -170,8 +171,8 @@ valDiv (Value lhv lht) (Value rhv rht) = do
 
 valPow :: Value -> Value -> Either String Value
 valPow (Value lhv lht) (Value rhv rht) = do
-  if rht == []
-    then return (Value (approxRational ((fromRational lhv :: Double) ** (fromRational rhv :: Double)) 0.01 ) (typeMul lht rhv))
+  if null rht
+    then return (Value (toRational ((fromRational lhv :: Double) ** (fromRational rhv :: Double))) (typeMul lht rhv))
     else Left "Exponents must be dimensionless"
 
 
@@ -185,10 +186,10 @@ insertMerging def merger ((oldKey, oldVal):xs) (newKey, newVal) = case compare n
   GT -> (newKey, merger def    newVal) : (oldKey, oldVal) : xs          -- Overshot
 
 typeAdd :: TypeSignature -> TypeSignature -> TypeSignature
-typeAdd lhs rhs = filter (\l -> snd l /= 0) (foldl (insertMerging 0 (+)) lhs rhs)
+typeAdd lhs rhs = filter (\l -> snd l /= 0) (L.foldl' (insertMerging 0 (+)) lhs rhs)
 
 typeSub :: TypeSignature -> TypeSignature -> TypeSignature
-typeSub lhs rhs = filter (\l -> snd l /= 0) (foldl (insertMerging 0 (-)) lhs rhs)
+typeSub lhs rhs = filter (\l -> snd l /= 0) (L.foldl' (insertMerging 0 (-)) lhs rhs)
 
 typeMul :: TypeSignature -> Rational -> TypeSignature
 typeMul typeSig n= map (\(key, val) -> (key, val * n)) typeSig
@@ -203,19 +204,19 @@ spaceWrapped inner = do
 
 parseOp :: Operator -> Parsec String () Operator
 parseOp Add = spaceWrapped $ do
-  char '+'
+  _<-char '+'
   return Add
 parseOp Sub = spaceWrapped $ do
-  char '-'
+  _<-char '-'
   return Sub
 parseOp Mul = spaceWrapped $ do
-  char '*'
+  _<-char '*'
   return Mul
 parseOp Div = spaceWrapped $ do
-  char '/'
+  _<-char '/'
   return Div
 parseOp Pow = spaceWrapped $ do
-  char '^'
+  _<-char '^'
   return Pow
 
 stackup :: AST -> (Operator, AST) -> AST
@@ -229,23 +230,23 @@ parseAdditive :: Parsec String () AST
 parseAdditive = spaceWrapped $ do
   first <- parseMultiplicative
   adds <- many (do
-                     operator <- (parseOp Add <|> parseOp Sub)
+                     operator <- parseOp Add <|> parseOp Sub
                      out <- parseMultiplicative
                      return (operator, out)
                  )
 
-  return $ foldl stackup first adds
+  return $ L.foldl' stackup first adds
 
 parseMultiplicative :: Parsec String () AST
 parseMultiplicative = spaceWrapped $ do
   first <- parsePow
   muls <- many (do
-                     operator <- (parseOp Mul <|> parseOp Div)
+                     operator <- parseOp Mul <|> parseOp Div
                      out <- parsePow
                      return (operator, out)
                  )
 
-  return $ foldl stackup first muls
+  return $ L.foldl' stackup first muls
 
 parsePow :: Parsec String () AST
 parsePow = spaceWrapped $ do
@@ -256,41 +257,45 @@ parsePow = spaceWrapped $ do
                      return (operator, out)
                  )
 
-  return $ foldl stackup first powers
+  return $ L.foldl' stackup first powers
 
 parseUnit :: Parsec String () AST
 parseUnit = spaceWrapped $ do
   lead <- letter
   rest <- many alphaNum
   (do
-      char '('
+      _ <- char '('
       inner <- parseEquation
-      char ')'
+      _ <- char ')'
       return $ Func (lead:rest) inner
-      )<|> (return (Unit (lead:rest)))
+      )<|> return (Unit (lead:rest))
 
 parseNumber :: Parsec String () AST
 parseNumber = spaceWrapped $ do
-  numb <- many (digit <|> char '.')
-  return (Numb (toRational.(read::String->Float) $ numb) ) -- Types are a fuck
+  num <- sepBy1 (many digit) (char '.')
+  case num of
+    [""]    -> parserFail "Improperly formatted number"
+    [n]     -> return $ Numb $ read n % 1
+    ["", d] -> return $ Numb $ read d % 10 ^ length d
+    [n, d]  -> return $ Numb $ (read n * 10 ^ length d + read d) % 10 ^ length d
+    _fail   -> parserFail "Improperly formatted number"
 
 parseParens :: Parsec String () AST
 parseParens = spaceWrapped $ do
-  char '('
+  _ <- char '('
   out <- parseEquation
-  char ')'
+  _ <- char ')'
   return out
 
 parseUnarySub :: Parsec String () AST
 parseUnarySub = spaceWrapped $ do
-  char '-'
-  inner <- parseEquation
-  return $ UnaryOp Sub inner
+  _ <- char '-'
+  UnaryOp Sub <$> parseEquation
 
 parseUnary :: Parsec String () AST
 parseUnary = parseParens <|> parseUnit <|> parseNumber <|> parseUnarySub
 
-
+defaultUnits :: [(String, Value)]
 defaultUnits = [
   ("sec",      Value 1          [("sec",   1)]),
   ("min",      Value 60         [("sec",   1)]),
@@ -307,7 +312,7 @@ defaultUnits = [
   ("foot",     Value 30.48      [("cm",    1)]),
   ("yard",     Value 91.44      [("cm",    1)]),
   ("pace",     Value 91.44      [("cm",    1)]),
-  ("mile",     Value 160 934.4  [("cm",    1)]),
+  ("mile",     Value 160934.4   [("cm",    1)]),
   ("denarius", Value 1          [("penny", 1)]),
   ("solidus",  Value 12         [("penny", 1)]),
   ("liber",    Value 240        [("penny", 1)]),
