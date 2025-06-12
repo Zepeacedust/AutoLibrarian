@@ -1,109 +1,52 @@
 {-# LANGUAGE OverloadedStrings #-}  -- allows "string literals" to be Text
-{-# LANGUAGE TemplateHaskell #-}
 module Main where
 import qualified Data.List as L
 import Data.Array ((!)) 
 import qualified Data.Array as Arr
 import           Data.Ord
-import           Data.List (find)
 import           Control.Monad (when, void)
-import           UnliftIO.Concurrent
-import           Data.Text (isPrefixOf, toUpper, Text, pack, unpack)
+import           Data.Text (toUpper, Text, pack, unpack)
 import           Data.Aeson
-import           Data.Aeson.TH
 import qualified Data.Text as T
 import qualified Data.Text.IO as TIO
-import qualified Data.ByteString.Lazy as B
 import           Data.Text.Encoding
 import           Discord
 import           Discord.Types
 import qualified Discord.Requests as R
 
+import Definitions
 import Calculator
+import Lookup
+import Searcher
 
-import Text.Regex.Posix
-
-spellRegex :: String
-spellRegex = "\\[\\[([^]]*)\\]\\]"
-
-getMentionedSpells :: String -> [String]
-getMentionedSpells input = 
-    let  
-         strLs = (input =~ spellRegex) :: [[String]]
-    in  map (head . tail) strLs
-
-data Level = Var Int | Gen deriving Show
-$(deriveJSON defaultOptions ''Level)
-data Spell = Spell {
-    name::Text,
-    level:: (Text, Text),
-    range:: Text,
-    duration::Text,
-    target::Text,
-    tags::[Text],
-    text::Text,
-    source:: (Text,Int)
-    } deriving Show
-$(deriveJSON defaultOptions ''Spell)
-
-
-diff :: Text -> Text -> Int
-diff a b = memo 0 0 where
-    helperFunc :: Int -> Int -> Int
-    helperFunc x y
-        | T.index a x == T.index b y = modded
-        | otherwise = minimum  [
-            1+subbed,
-            1+added
-            ]
-        where
-            modded = memo (x+1) (y+1)
-            added  = memo (x)   (y+1)
-            subbed = memo (x+1)   (y)
-    memo x y
-      | x >= lA = lB - y
-      | y >= lB = lA - x
-      | otherwise     = arr ! (x, y)
-    arr = Arr.listArray bound [helperFunc x y | (x,y) <- Arr.range bound]
-    bound = ((0,0),(lA, lB))
-    lA = T.length a
-    lB = T.length b
-
-readGrimoire fileName = do
-    file <- B.readFile fileName
-    let Just grimoire = decode file :: Maybe [Spell]
-    return grimoire
-
-lookupSpell :: [Spell] -> Text -> Spell
-lookupSpell grimoire target = L.minimumBy (comparing (diff (toUpper target) . name)) grimoire
-
-postSpells :: ChannelId -> [Spell] -> DiscordHandler ()
-postSpells channel spells = do
-  let spellTexts = map renderSpell spells
+postSpells :: Message -> [Spell] -> DiscordHandler ()
+postSpells message spells = do
+  let spellTexts = map renderSpell $ L.nub spells
   let spellChunk = T.concat . L.intersperse "\n\n" $ spellTexts
-  if T.length spellChunk < 800
+  respond message spellChunk
+
+postSummaries :: Message -> [Spell] -> DiscordHandler ()
+postSummaries message spells = do
+  let summaries = map spellSignature spells
+  respond message (T.concat . L.intersperse "\n" $ summaries)
+
+-- | Build MessageReference from Message
+--   Might already exist, but I couldn't find it.
+getReference :: Message -> MessageReference
+getReference m = MessageReference {referenceMessageId = Just $ messageId m,
+                                   referenceChannelId = Just $ messageChannelId m,
+                                   referenceGuildId   = messageGuildId   m,
+                                   failIfNotExists    = False
+                                  }
+
+respond :: Message -> Text -> DiscordHandler ()
+respond message content = do
+  let channel = messageChannelId message
+  if T.length content <= 800
         then
-            void $ restCall (R.CreateMessage channel spellChunk)
+            void $ restCall (R.CreateMessageDetailed channel (def {R.messageDetailedContent = content, R.messageDetailedReference = Just $ getReference message}))
         else
-            void $ restCall (R.CreateMessageDetailed channel (def {R.messageDetailedFile= Just ("spell.md", encodeUtf8 spellChunk)}))
-
-
-postSpell ::ChannelId -> Spell -> DiscordHandler ()
-postSpell channel spell = do
-    let spellCont = renderSpell spell
-    if T.length spellCont <= 800
-        then
-            void $ restCall (R.CreateMessage channel (renderSpell spell))
-        else
-            void $ restCall (R.CreateMessageDetailed channel (def {R.messageDetailedFile= Just ("spell.md", encodeUtf8 spellCont)}))
-
-
-renderSpell :: Spell -> Text
-renderSpell spell = "### " <> name spell<> "\n**" 
-                            <> (fst.level$ spell) <> " " <> (snd.level $ spell) <> "**\n"
-                            <> "**R:** " <> range spell <>", **D:** "<> duration spell <>", **T:** " <> target spell <> ", " <> T.intercalate ", " (tags spell) <> "\n" 
-                            <> text spell <> "\n> "
-                            <> (fst.source$ spell)<> " " <> (T.show . snd.source $ spell)
+            void $ restCall (R.CreateMessageDetailed channel (def {R.messageDetailedFile= Just ("spell.md", encodeUtf8 content), R.messageDetailedReference = Just $ getReference message}))
 
 autoLibrarian :: [Spell] ->  IO ()
 autoLibrarian grimoire = do
@@ -115,6 +58,24 @@ autoLibrarian grimoire = do
              }
     TIO.putStrLn userFacingError
 
+
+lookupMessage :: [Spell] -> Message -> DiscordHandler ()
+lookupMessage grimoire m = do
+  let matches = getMentionedSpells . unpack. messageContent $ m
+      descriptions = map (lookupSpell grimoire . pack) matches
+  postSpells m descriptions
+
+
+searchMessage :: [Spell] -> Message -> DiscordHandler ()
+searchMessage grimoire m = do
+  let
+    predicate = getPredicate . messageContent $ m
+  case predicate of
+    Right pred -> do
+      let matching = filter pred grimoire
+      postSummaries m matching
+    Left message -> respond m $ T.pack message
+
 calcMessage :: Message -> DiscordHandler ()
 calcMessage m = do
   let reply = parseCalc.unpack.messageContent $ m
@@ -122,15 +83,11 @@ calcMessage m = do
 
 eventHandler :: [Spell] -> Event -> DiscordHandler ()
 eventHandler grimoire event = case event of
-    MessageCreate m -> when( not( fromBot  m)) $ do
-        if "!calc" `T.isPrefixOf` messageContent m
-          then do
-            calcMessage m
-          else do
-            let matches = getMentionedSpells . unpack. messageContent $ m
-                descriptions = map (lookupSpell grimoire . pack) matches
-            postSpells (messageChannelId m) descriptions
-    _ -> do
+    MessageCreate m -> when(not(fromBot  m)) $ do
+        if "!calc" `T.isPrefixOf` messageContent m then calcMessage m
+          else if "!find" `T.isPrefixOf` messageContent m then  searchMessage grimoire m
+            else lookupMessage grimoire m
+    _ignored -> do
         return ()
 
 fromBot :: Message -> Bool
