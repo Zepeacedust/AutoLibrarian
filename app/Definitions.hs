@@ -46,13 +46,49 @@ data Spell = Spell {
     } deriving (Show, Eq)
 $(deriveJSON defaultOptions ''Spell)
 
+data Merit = Merit {
+    meritAllowMultiple :: !(T.Text),
+    meritApplicableTo  :: !(T.Text),
+    meritCategory      :: !(T.Text),
+    meritDesc          :: !(T.Text),
+    meritName          :: !(T.Text),
+    meritRestriction   :: !(T.Text),
+    -- meritExclude       :: !(T.Text),
+    meritSource        :: !(T.Text),
+    meritType          :: !(T.Text),
+    meritValue         :: !(Integer)
+    } deriving (Show, Eq)
+$(deriveJSON defaultOptions ''Merit)
 
-renderSpell :: Spell -> T.Text
-renderSpell spell = "### " <> name spell <> "\n**"
-                            <> (renderSig.typeSig $ spell) <> "**\n"
+data Postable = PostableSpell !Spell | PostableMerit !Merit deriving Eq
+
+class NicePrintable record where
+  render :: record -> T.Text
+  sign   :: record -> T.Text
+
+instance NicePrintable Spell where
+  render spell = "### " <> name spell <> "\n**"
+                            <> sign spell <> "**\n"
                             <> "**R:** " <> range spell <>", **D:** "<> duration spell <>", **T:** " <> target spell <> ", " <> T.intercalate ", " (tags spell) <> "\n"
                             <> text spell <> "\n> "
                             <> (fst.source$ spell)<> " " <> (T.show . snd.source $ spell)
+
+  sign spell = name spell <> " " <> ( renderSig . typeSig $ spell ) <> " " <> T.intercalate ", " (tags spell)
+
+getMagnitude :: Integer -> T.Text
+getMagnitude m = case m of
+  1 -> "Minor"
+  3 -> "Major"
+  _ -> "Strange"
+instance NicePrintable Merit where
+  render m = "### " <> meritName m <> "\n**" <> (getMagnitude . meritValue) m <> " " <> meritCategory m <> " " <> meritType m <> "**\n" <> meritDesc m <> "\n> " <> meritSource m
+  sign   = meritName
+
+instance NicePrintable Postable where
+  render (PostableSpell spell) = render spell
+  render (PostableMerit merit) = render merit
+  sign   (PostableSpell spell) = sign spell
+  sign   (PostableMerit merit) = sign merit
 
 renderSig :: TypeSig -> T.Text
 renderSig sig = te <> fo <> " " <> renderLevel (level sig) <> " " where
@@ -63,12 +99,10 @@ renderLevel :: Level -> T.Text
 renderLevel  Gen    = "Gen"
 renderLevel (Var n) = T.pack . show $ n
 
-
-spellSignature :: Spell -> T.Text
-spellSignature spell = name spell <> " " <> ( renderSig . typeSig $ spell ) <> " " <> T.intercalate ", " (tags spell)
-
-readGrimoire :: String -> IO [Spell]
-readGrimoire fileName = do
+readJson :: FromJSON a => String -> IO [a]
+readJson fileName = do
     file <- B.readFile fileName
-    let Right grimoire = eitherDecode file :: Either String [Spell]
-    return grimoire
+    case eitherDecode file of
+      Right grimoire -> return grimoire
+      Left err -> do
+        error err

@@ -139,10 +139,10 @@ matchRelation GreaterEq   Level operand = case readMaybe operand of
   Just val -> Right $ \spell -> (level . typeSig $ spell) >= Var val
   Nothing  -> Left "Improper number"
 matchRelation LessThan    Level operand = case readMaybe operand of
-  Just val -> Right $ \spell -> (level . typeSig $ spell) < Var val
+  Just val -> Right $ \spell -> (level . typeSig $ spell) >= Var val
   Nothing  -> Left "Improper number"
 matchRelation LessEq      Level operand = case readMaybe operand of
-  Just val -> Right $ \spell -> (level . typeSig $ spell) <= Var val
+  Just val -> Right $ \spell -> (level . typeSig $ spell) >= Var val
   Nothing  -> Left "Improper number"
 
 matchRelation Has Range operand     = Right $ \spell -> (== T.pack operand) . range $ spell

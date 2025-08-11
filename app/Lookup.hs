@@ -11,11 +11,21 @@ import Data.Ord
 spellRegex :: String
 spellRegex = "\\[\\[([^]]*)\\]\\]"
 
-getMentionedSpells :: String -> [String]
-getMentionedSpells input =
+meritRegex :: String
+meritRegex = "\\{\\{([^}]*)\\}\\}"
+
+getMentionedThings :: String -> String -> [String]
+getMentionedThings thingPattern input =
     let
-         strLs = (input =~ spellRegex) :: [[String]]
+         strLs = (input =~ thingPattern) :: [[String]]
     in  map (head . tail) strLs
+
+getMentionedSpells :: String -> [String]
+getMentionedSpells = getMentionedThings spellRegex
+
+getMentionedMerits :: String -> [String]
+getMentionedMerits = getMentionedThings meritRegex
+
 
 diff :: T.Text -> T.Text -> Int
 diff a b = memo 0 0 where
@@ -43,3 +53,6 @@ diff a b = memo 0 0 where
 
 lookupSpell :: [Spell] -> T.Text -> Spell
 lookupSpell grimoire target = L.minimumBy (comparing (diff (T.toUpper target) . name)) grimoire
+
+lookupVirtue :: [Merit] -> T.Text -> Merit
+lookupVirtue merits target = L.minimumBy (comparing (diff (T.toLower target) . (T.toLower . meritName))) merits

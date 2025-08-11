@@ -19,15 +19,15 @@ import Calculator
 import Lookup
 import Searcher
 
-postSpells :: Message -> [Spell] -> DiscordHandler ()
-postSpells message spells = do
-  let spellTexts = map renderSpell $ L.nub spells
+postThings :: Message -> [Postable] -> DiscordHandler ()
+postThings message things = do
+  let spellTexts = map render $ L.nub things
   let spellChunk = T.concat . L.intersperse "\n\n" $ spellTexts
   respond message spellChunk
 
 postSummaries :: Message -> [Spell] -> DiscordHandler ()
 postSummaries message spells = do
-  let summaries = map spellSignature spells
+  let summaries = map sign spells
   respond message (T.concat . L.intersperse "\n" $ summaries)
 
 -- | Build MessageReference from Message
@@ -48,22 +48,24 @@ respond message content = do
         else
             void $ restCall (R.CreateMessageDetailed channel (def {R.messageDetailedFile= Just ("spell.md", encodeUtf8 content), R.messageDetailedReference = Just $ getReference message}))
 
-autoLibrarian :: [Spell] ->  IO ()
-autoLibrarian grimoire = do
+autoLibrarian :: [Spell] -> [Merit] ->  IO ()
+autoLibrarian grimoire merits = do
     token <- TIO.readFile "tokenFile"
     userFacingError <- runDiscord $ def
              { discordToken = token
-             , discordOnEvent = eventHandler grimoire
+             , discordOnEvent = eventHandler grimoire merits
              , discordOnLog = \s -> TIO.putStrLn s >> TIO.putStrLn ""
              }
     TIO.putStrLn userFacingError
 
 
-lookupMessage :: [Spell] -> Message -> DiscordHandler ()
-lookupMessage grimoire m = do
-  let matches = getMentionedSpells . unpack. messageContent $ m
-      descriptions = map (lookupSpell grimoire . pack) matches
-  postSpells m descriptions
+lookupMessage :: [Spell] -> [Merit] -> Message -> DiscordHandler ()
+lookupMessage grimoire merits m = do
+  let matches = getMentionedSpells . unpack . messageContent $ m
+      descriptions = map (PostableSpell . lookupSpell grimoire . pack) matches
+  let meritMatches = getMentionedMerits . unpack . messageContent $ m
+      meritText = map (PostableMerit . lookupVirtue merits . pack) meritMatches
+  postThings m (descriptions ++ meritText)
 
 
 searchMessage :: [Spell] -> Message -> DiscordHandler ()
@@ -81,12 +83,12 @@ calcMessage m = do
   let reply = parseCalc.unpack.messageContent $ m
   void $ restCall (R.CreateMessage (messageChannelId m) (T.pack reply))
 
-eventHandler :: [Spell] -> Event -> DiscordHandler ()
-eventHandler grimoire event = case event of
+eventHandler :: [Spell] -> [Merit] -> Event -> DiscordHandler ()
+eventHandler grimoire merits event = case event of
     MessageCreate m -> when(not(fromBot  m)) $ do
         if "!calc" `T.isPrefixOf` messageContent m then calcMessage m
           else if "!find" `T.isPrefixOf` messageContent m then  searchMessage grimoire m
-            else lookupMessage grimoire m
+            else lookupMessage grimoire merits m
     _ignored -> do
         return ()
 
@@ -95,5 +97,6 @@ fromBot = userIsBot . messageAuthor
 
 main :: IO ()
 main = do
-    grimoire <- readGrimoire "grimoire.json"
-    autoLibrarian grimoire
+    grimoire <- readJson "grimoire.json"
+    merits <- readJson "merits.json"
+    autoLibrarian grimoire merits
