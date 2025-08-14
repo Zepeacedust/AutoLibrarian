@@ -52,7 +52,7 @@ As an example `!calc 10 * km * 1 * m` returns `1.0e8 cm^2.0`, 100 thousand squar
 | Denarius         | 1 penny                | [d/D]enarius, [d/D]enarii                |
 | Solidus          | 12 pennies             | [s/S]olidus, [s/S]olidi                  |
 | Shilling         | 12 pennies             | [s/S]hilling(s)                          |
-| Pound (currency) | 20 shillings           | [p/P]ound(s)                             |
+| Pound (currency) | 20 shillings           | [l/L]ibra                                |
 | Gram             | Base weight unit       | g, [g/G]ram(s)                           |
 | Kilogram         | 1000 grams             | kg, [k/K]ilogram(s), [k/K]ilo(s)         |
 | Ton              | 1000 kilograms         | [t/T]on(s)                               |
