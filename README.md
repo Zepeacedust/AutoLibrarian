@@ -41,7 +41,7 @@ As an example `!calc 10 * km * 1 * m` returns `1.0e8 cm^2.0`, 100 thousand squar
 | Season           | 3 months               | [s/S]eason(s)                            |
 | Year             | 4 seasons              | [y/Y]ear(s)                              |
 | Centimeter       | Base distance unit     | cm, [c/C]entimeter(s), [c/C]entimetre(s) |
-| Meter            | 100 cm                 | m, [m/M]eter(s), [m/m]etre(s)            |
+| Meter            | 100 cm                 | m, [m/M]eter(s), [m/M]etre(s)            |
 | Kilometer        | 1000km                 | km, [k/K]ilometer(s),                    |
 | Inch             | 2.54cm                 | in, [i/I]nch(es)                         |
 | Foot             | 12 inches              | ft, [f/F]oot, [f/F]eet                   |
